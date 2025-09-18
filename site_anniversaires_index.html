@@ -1,0 +1,200 @@
+<!doctype html>
+<html lang="fr">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>Participations - Anniversaires</title>
+  <style>
+    :root{--bg:#0f1724;--card:#0b1220;--accent:#60a5fa;--muted:#94a3b8;--glass: rgba(255,255,255,0.03)}
+    *{box-sizing:border-box}
+    body{font-family:Inter, ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial; margin:0; min-height:100vh; background:linear-gradient(180deg,#071024 0%, #041325 100%); color:#e6eef8}
+    header{padding:24px 20px; display:flex; align-items:center; justify-content:space-between}
+    h1{margin:0;font-size:18px}
+    .container{max-width:980px;margin:0 auto;padding:12px}
+    .login, .content{background:linear-gradient(180deg, rgba(255,255,255,0.02), rgba(255,255,255,0.01)); border:1px solid rgba(255,255,255,0.03); padding:18px; border-radius:12px}
+    .login{display:flex;gap:12px;align-items:center}
+    input[type=text]{padding:10px 12px;border-radius:8px;border:1px solid rgba(255,255,255,0.06);background:transparent;color:inherit;min-width:200px}
+    button{background:var(--accent);border:none;padding:10px 14px;border-radius:8px;color:#04203b;font-weight:600;cursor:pointer}
+    .events{display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-top:16px}
+    .card{padding:14px;border-radius:12px;background:var(--card);box-shadow:0 6px 18px rgba(2,6,23,0.6);border:1px solid rgba(255,255,255,0.02)}
+    .card h2{margin:0 0 6px 0;font-size:16px}
+    .card p{margin:0 0 12px 0;color:var(--muted);font-size:13px}
+    ul{list-style:none;padding:0;margin:0}
+    li{display:flex;align-items:center;justify-content:space-between;padding:8px;border-radius:8px;background:var(--glass);margin-bottom:8px}
+    label{display:flex;gap:12px;align-items:center;cursor:pointer}
+    .owner{font-size:12px;color:var(--muted)}
+    .note{margin-top:10px;font-size:13px;color:var(--muted)}
+    .footer{margin-top:12px;font-size:13px;color:var(--muted)}
+    .small{font-size:12px;color:var(--muted)}
+    .unavailable{opacity:0.6}
+    .hint{margin-left:8px;font-size:12px;color:var(--muted)}
+    @media(max-width:800px){.events{grid-template-columns:1fr}}
+  </style>
+</head>
+<body>
+  <header>
+    <div class="container" style="display:flex;align-items:center;justify-content:space-between;padding:0">
+      <h1>Participations cadeaux — Démo GitHub Pages</h1>
+      <div class="small">Stockage local (localStorage) — Sans backend</div>
+    </div>
+  </header>
+
+  <main class="container">
+    <section class="login" id="loginSection">
+      <div style="flex:1">
+        <strong>Entrez votre pseudonyme</strong>
+        <div class="hint">Utilisez un pseudonyme unique — il sera utilisé pour verrouiller vos choix.</div>
+      </div>
+      <input type="text" id="pseudonyme" placeholder="ex: Paul123" aria-label="pseudonyme">
+      <button id="loginBtn">Se connecter</button>
+    </section>
+
+    <section class="content" id="contentSection" style="display:none;margin-top:14px">
+      <div style="display:flex;align-items:center;justify-content:space-between">
+        <div>
+          <strong id="welcome"></strong>
+          <div class="small">Choisissez seulement 1 option par personne. Les choix sont verrouillés par pseudonyme.</div>
+        </div>
+        <div>
+          <button id="logoutBtn">Se déconnecter</button>
+        </div>
+      </div>
+
+      <div class="events" id="events"></div>
+
+      <div class="footer">Note : cette version stocke les votes dans votre navigateur. Pour que tout le monde voie les mêmes choix depuis différents appareils, il faudrait un backend (Firebase, GitHub Gist via token, ou un service tiers). Je peux t'aider à ajouter ça si tu veux.</div>
+    </section>
+  </main>
+
+  <script>
+    // Données initiales des événements
+    const EVENTS = [
+      {
+        id: 'hazel',
+        title: "Anniversaire Hazel",
+        options: [
+          {id: 'parfum', label: 'Parfum'},
+          {id: 'velo', label: 'Vélo'},
+          {id: 'chaussures', label: 'Chaussures'}
+        ]
+      },
+      {
+        id: 'augustin',
+        title: "Anniversaire Augustin",
+        options: [
+          {id: 'dossard', label: 'Dossard Semi de Deauville'},
+          {id: 'gel', label: 'Gel'},
+          {id: 'manga', label: 'Manga'}
+        ]
+      }
+    ];
+
+    // Clé localStorage
+    const STORAGE_KEY = 'participations_anniversaires_v1';
+
+    // Récupère l'état depuis localStorage ou initialise
+    function loadState(){
+      try{
+        const raw = localStorage.getItem(STORAGE_KEY);
+        if(!raw) return {};
+        return JSON.parse(raw);
+      }catch(e){console.error('Échec lecture state', e); return {};}
+    }
+    function saveState(state){ localStorage.setItem(STORAGE_KEY, JSON.stringify(state)); }
+
+    // Retourne owner (pseudonyme) ou null
+    function getOwner(state, eventId, optionId){ return state?.[eventId]?.[optionId] ?? null; }
+
+    // Assigne un owner (ou supprime s'il est null)
+    function setOwner(state, eventId, optionId, owner){ if(!state[eventId]) state[eventId] = {}; if(owner) state[eventId][optionId] = owner; else delete state[eventId][optionId]; saveState(state); }
+
+    // UI
+    const loginSection = document.getElementById('loginSection');
+    const contentSection = document.getElementById('contentSection');
+    const loginBtn = document.getElementById('loginBtn');
+    const logoutBtn = document.getElementById('logoutBtn');
+    const pseudoInput = document.getElementById('pseudonyme');
+    const welcome = document.getElementById('welcome');
+    const eventsDiv = document.getElementById('events');
+
+    let state = loadState();
+    let pseudonyme = sessionStorage.getItem('pseudonyme') || null;
+
+    function render(){
+      eventsDiv.innerHTML = '';
+      EVENTS.forEach(ev=>{
+        const card = document.createElement('div'); card.className='card';
+        const h = document.createElement('h2'); h.textContent = ev.title; card.appendChild(h);
+        const p = document.createElement('p'); p.textContent = 'Participation cadeau:'; card.appendChild(p);
+        const ul = document.createElement('ul');
+        ev.options.forEach(opt=>{
+          const li = document.createElement('li');
+
+          const label = document.createElement('label');
+          const chk = document.createElement('input'); chk.type='checkbox'; chk.dataset.event = ev.id; chk.dataset.option = opt.id;
+
+          const span = document.createElement('span'); span.textContent = opt.label;
+          label.appendChild(chk); label.appendChild(span);
+
+          const owner = document.createElement('div'); owner.className='owner';
+          const currentOwner = getOwner(state, ev.id, opt.id);
+          if(currentOwner){
+            owner.textContent = 'Réservé par: ' + currentOwner;
+            if(pseudonyme && currentOwner === pseudonyme){ chk.checked = true; chk.disabled = false; } else { chk.checked = true; chk.disabled = true; li.classList.add('unavailable'); }
+          } else { owner.textContent = 'Libre'; chk.checked = false; chk.disabled = false; }
+
+          // Event when toggling
+          chk.addEventListener('change', (e)=>{
+            const evId = e.target.dataset.event; const optId = e.target.dataset.option;
+            const ownerNow = getOwner(state, evId, optId);
+            // If checkbox checked, attempt to take ownership
+            if(e.target.checked){
+              if(ownerNow && ownerNow !== pseudonyme){
+                // shouldn't happen due to disabled, but safe-check
+                alert('Cet option est déjà prise par ' + ownerNow);
+                e.target.checked = false; return;
+              }
+              setOwner(state, evId, optId, pseudonyme);
+              // after claiming, disable other checkboxes for same event? The user asked that once a person checked, nobody else can remove and nobody else can place a cross above — but it didn't say only one choice per event overall. So we allow multiple people to pick different options. However we must ensure others cannot overwrite.
+            }else{
+              // Unchecking: allow only if current user is the owner
+              if(ownerNow !== pseudonyme){
+                alert('Vous ne pouvez pas retirer cette croix — elle appartient à ' + (ownerNow || 'personne')); e.target.checked = true; return;
+              }
+              // remove ownership
+              setOwner(state, evId, optId, null);
+            }
+            // re-render to apply disabling rules
+            state = loadState(); render();
+          });
+
+          li.appendChild(label);
+          li.appendChild(owner);
+          ul.appendChild(li);
+        });
+        card.appendChild(ul);
+        card.appendChild(document.createElement('div'));
+        eventsDiv.appendChild(card);
+      });
+    }
+
+    function doLogin(name){
+      if(!name || !name.trim()){ alert('Choisis un pseudonyme.'); return; }
+      pseudonyme = name.trim(); sessionStorage.setItem('pseudonyme', pseudonyme);
+      welcome.textContent = 'Connecté en tant que ' + pseudonyme;
+      loginSection.style.display = 'none'; contentSection.style.display = 'block';
+      state = loadState(); render();
+    }
+
+    loginBtn.addEventListener('click', ()=>doLogin(pseudoInput.value));
+    pseudoInput.addEventListener('keydown', (e)=>{ if(e.key==='Enter') doLogin(pseudoInput.value); });
+    logoutBtn.addEventListener('click', ()=>{ sessionStorage.removeItem('pseudonyme'); pseudonyme = null; loginSection.style.display='flex'; contentSection.style.display='none'; pseudoInput.value=''; });
+
+    // Si déjà connecté en session, afficher
+    if(pseudonyme){ welcome.textContent = 'Connecté en tant que ' + pseudonyme; loginSection.style.display='none'; contentSection.style.display='block'; render(); }
+
+    // Explication supplémentaire accessible via console
+    console.log('Storage key:', STORAGE_KEY, '\nEvents:', EVENTS);
+  </script>
+</body>
+</html>
